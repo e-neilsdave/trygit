@@ -1,0 +1,121 @@
+<?php
+// Input your info here:
+$integratorKey = '455e8781-5535-4cce-a435-21544ab9d994';
+$email = 'dave.nilesh@rayosun.com';
+$password = '321#Nilesh@';
+
+$recipient_email = 'nilesh_dave@silvertouch.com';
+$name = 'Nilesh';
+$document_name = 'http://localhost/tryit/contract.pdf';
+
+// construct the authentication header:
+$header = "<DocuSignCredentials><Username>" . $email . "</Username><Password>" . $password . "</Password><IntegratorKey>" . $integratorKey . "</IntegratorKey></DocuSignCredentials>";
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// STEP 1 - Login (to retrieve baseUrl and accountId)
+/////////////////////////////////////////////////////////////////////////////////////////////////
+$url = "https://demo.docusign.net/restapi/v2/login_information";
+$curl = curl_init($url);
+curl_setopt($curl, CURLOPT_HEADER, false);
+curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($curl, CURLOPT_HTTPHEADER, array("X-DocuSign-Authentication: $header"));
+
+$json_response = curl_exec($curl);
+$status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+if ( $status != 200 ) {
+	echo "error calling webservice, status is:" . $status;
+	exit(-1);
+}
+
+$response = json_decode($json_response, true);
+$accountId = $response["loginAccounts"][0]["accountId"];
+$baseUrl = $response["loginAccounts"][0]["baseUrl"];
+curl_close($curl);
+
+//--- display results
+echo "\naccountId = " . $accountId . "\nbaseUrl = " . $baseUrl . "\n";
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// STEP 2 - Create an envelope with one recipient, one tab, one document and send!
+/////////////////////////////////////////////////////////////////////////////////////////////////
+$file_contents = base64_encode(file_get_contents($document_name));
+$data = "{
+  \"emailBlurb\":\"This comes from PHP\",
+  \"emailSubject\":\"DocuSign API - Please Sign This Document...\",
+  \"documents\":[
+    {
+      \"documentId\":\"255\",
+      \"name\":\"contract.pdf\",	 
+	  \"documentBase64\":\"$file_contents\"
+	   
+    }
+  ],
+  \"recipients\":{
+    \"signers\":[
+      {
+        \"email\":\"$recipient_email\",
+        \"name\":\"$name\",
+        \"recipientId\":\"1\",
+        \"tabs\":{
+          \"signHereTabs\":[
+            {
+              \"xPosition\":\"25:\",
+              \"yPosition\":\"50\",              
+              \"documentId\":\"255\",
+              \"pageNumber\":\"1\"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  \"status\":\"sent\"
+}";  
+
+
+#$file_contents = base64_encode(file_get_contents($document_name));
+
+echo $requestBody = "\r\n"
+."\r\n"
+."--myboundary\r\n"
+."Content-Type: application/json\r\n"
+."Content-Disposition: form-data\r\n"
+."\r\n"
+."$data\r\n"
+."--myboundary\r\n"
+."Content-Type:application/pdf\r\n"
+."Content-Disposition: file; filename=\"contract.pdf\"; documentid=\"255\" \r\n"
+."\r\n"
+."$file_contents\r\n"
+."--myboundary--\r\n"
+."\r\n";
+
+// *** append "/envelopes" to baseUrl and as signature request endpoint
+$curl = curl_init($baseUrl . "/envelopes" );
+curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($curl, CURLOPT_POST, true);
+curl_setopt($curl, CURLOPT_POSTFIELDS, $requestBody);
+curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($curl, CURLOPT_HTTPHEADER, array(
+	'Content-Type: multipart/form-data;boundary=myboundary',
+	'Content-Length: ' . strlen($requestBody),
+	"X-DocuSign-Authentication: $header" )
+);
+
+$json_response = curl_exec($curl);
+$status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+if ( $status != 201 ) {
+	echo "error calling webservice, status is:" . $status . "\nerror text is --> ";
+	print_r($json_response); echo "\n";
+	exit(-1);
+}
+
+$response = json_decode($json_response, true);
+$envelopeId = $response["envelopeId"];
+
+//--- display results
+echo "Document is sent! Envelope ID = " . $envelopeId . "\n\n"; 
+
+?>
